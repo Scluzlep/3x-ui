@@ -1,6 +1,7 @@
 package sub
 
 import (
+	"encoding/base64"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -1257,6 +1258,17 @@ func (s *SubClashService) applySecurity(proxy map[string]any, security string, s
 			if pins, ok := tlsSettings["pin-sha256"].([]any); ok && len(pins) > 0 {
 				proxy["pin-sha256"] = pins
 			}
+			// Host-level ECH settings override the inbound's client ECHConfigList.
+			// Host TLS overrides are stored under "settings" by the shared renderer.
+			ech, _ := tlsSettings["echConfigList"].(string)
+			if inner, ok := tlsSettings["settings"].(map[string]any); ok {
+				if override, ok := inner["echConfigList"].(string); ok && override != "" {
+					ech = override
+				}
+			}
+			if echOpts := mihomoECHOpts(ech); echOpts != nil {
+				proxy["ech-opts"] = echOpts
+			}
 		}
 		return true
 	case "reality":
@@ -1316,10 +1328,39 @@ func (s *SubClashService) tlsData(tData map[string]any) map[string]any {
 	if fingerprint, ok := tlsClientSettings["fingerprint"].(string); ok {
 		tlsData["fingerprint"] = fingerprint
 	}
+	if ech, ok := tlsClientSettings["echConfigList"].(string); ok && ech != "" {
+		tlsData["echConfigList"] = ech
+	}
 	if pins, ok := tlsClientSettings["pinnedPeerCertSha256"].([]any); ok && len(pins) > 0 {
 		tlsData["pin-sha256"] = pins
 	}
 	return tlsData
+}
+
+// mihomoECHOpts converts Xray's client ECHConfigList (used by share links
+// and per-host TLS settings) to Mihomo's ech-opts. Xray may contain a fixed
+// base64 ECHConfigList, a "public-name+https://DoH" lookup, or a DoH URL.
+// Mihomo uses the configured DNS resolvers for dynamic ECH lookups and cannot
+// express Xray's per-node DoH URL.
+func mihomoECHOpts(raw string) map[string]any {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil
+	}
+	if strings.HasPrefix(raw, "https://") {
+		return map[string]any{"enable": true}
+	}
+	if name, doh, ok := strings.Cut(raw, "+https://"); ok {
+		name = strings.TrimSpace(name)
+		if name == "" || strings.ContainsAny(name, " /") || doh == "" {
+			return nil
+		}
+		return map[string]any{"enable": true, "query-server-name": name}
+	}
+	if _, err := base64.StdEncoding.DecodeString(raw); err != nil {
+		return nil
+	}
+	return map[string]any{"enable": true, "config": raw}
 }
 
 func (s *SubClashService) realityData(rData map[string]any) map[string]any {
