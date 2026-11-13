@@ -33,6 +33,8 @@ curl -fL https://raw.githubusercontent.com/Scluzlep/3x-ui/main/update.sh -o /tmp
 sudo env XUI_UPDATE_TAG=dev-latest bash /tmp/xui-fork-update.sh
 ```
 
+**Enable Issues in Settings → General → Features → Issues first** (this fork currently has Issues disabled). Otherwise a build result is visible only in Actions, because issue notifications cannot be posted.
+
 Configure GitHub notifications for Issues and Releases in this fork to receive
 the `[upstream-sync]` notifications. Scheduled checks are best-effort and
 may be delayed by GitHub.
