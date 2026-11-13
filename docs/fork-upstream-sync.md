@@ -4,6 +4,12 @@ The fork automatically polls the [official 3x-ui release](https://github.com/MHS
 every six hours. It can also be run from **Actions → Sync upstream stable
 releases → Run workflow**.
 
+**Important for GitHub forks:** GitHub may disable scheduled workflows by
+default in a newly forked repository. Visit **Actions → Sync upstream stable
+releases**. If the page shows **Enable workflow**, click it once. Then use
+**Run workflow** for an initial manual check; the schedule is not active until
+the workflow is enabled.
+
 New stable tags are merged into `main` (not force-reset), preserving the
 fork's Mihomo ECH converter. If there is a conflict or `go test ./internal/sub`
 fails, the workflow stops, leaves `main` unchanged, and opens a GitHub Issue.
