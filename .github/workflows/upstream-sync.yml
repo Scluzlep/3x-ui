@@ -1,0 +1,96 @@
+name: Sync upstream stable releases
+
+on:
+  schedule:
+    - cron: '17 */6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: write
+  issues: write
+
+concurrency:
+  group: upstream-stable-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Detect latest official stable tag
+        id: latest
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag="$(gh api repos/MHSanaei/3x-ui/releases/latest --jq .tag_name)"
+          [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::Unexpected upstream version: $tag"; exit 1; }
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          git remote add upstream https://github.com/MHSanaei/3x-ui.git
+          git fetch --no-tags upstream "refs/tags/$tag:refs/tags/upstream-$tag"
+          if git merge-base --is-ancestor "refs/tags/upstream-$tag" HEAD; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "Upstream $tag is already included." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/setup-go@v7
+        if: steps.latest.outputs.skip == 'false'
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Merge stable release, test ECH, and dispatch release
+        if: steps.latest.outputs.skip == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.latest.outputs.tag }}
+        run: |
+          set -euo pipefail
+          report_failure() {
+            local why="$1"
+            local title="[upstream-sync] $TAG requires attention"
+            local existing
+            existing="$(gh issue list --repo "$GITHUB_REPOSITORY" --state all --limit 200 --json title,number |
+              jq -r --arg title "$title" '.[] | select(.title == $title) | .number' | head -n 1 || true)"
+            if [[ -z "$existing" ]]; then
+              printf '@Scluzlep — Automatic sync of upstream %s failed.\n\nReason: %s\n\nWorkflow: %s/%s/actions/runs/%s\n\nNo forced merge or VPS deployment was performed.\n' \
+                "$TAG" "$why" "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID" > /tmp/upstream-sync-issue.txt
+              gh issue create --repo "$GITHUB_REPOSITORY" --title "$title" --body-file /tmp/upstream-sync-issue.txt || true
+            fi
+            echo "::error::$why"
+          }
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          if ! git merge --no-ff "refs/tags/upstream-$TAG" -m "chore(upstream): merge stable $TAG"; then
+            conflicted="$(git diff --name-only --diff-filter=U | tr '\n' ' ' || true)"
+            git merge --abort || true
+            report_failure "Merge conflicts: ${conflicted:-unknown}"
+            exit 1
+          fi
+          if ! grep -q 'func mihomoECHOpts' internal/sub/clash_service.go; then
+            report_failure "Custom Mihomo ECH generator was lost."
+            exit 1
+          fi
+          mkdir -p internal/web/dist
+          touch internal/web/dist/.gitkeep
+          if ! go test ./internal/sub; then
+            report_failure "Go subscription regression tests failed."
+            exit 1
+          fi
+          if ! git push origin HEAD:main; then
+            report_failure "Cannot push merge to main; check concurrent commits or branch protection."
+            exit 1
+          fi
+          # GITHUB_TOKEN push events cannot start other push-triggered workflows.
+          # workflow_dispatch is explicitly allowed and publishes dev-latest.
+          if ! gh workflow run release.yml --repo "$GITHUB_REPOSITORY" --ref main; then
+            report_failure "Merged successfully, but dispatching the Release workflow failed."
+            exit 1
+          fi
+          gh workflow run ci.yml --repo "$GITHUB_REPOSITORY" --ref main ||
+            echo "::warning::CI workflow dispatch failed."
+          echo "Merged $TAG, tested the ECH converter, and dispatched Release + CI." >> "$GITHUB_STEP_SUMMARY"

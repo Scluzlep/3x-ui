@@ -1,0 +1,41 @@
+name: Notify upstream release results
+
+on:
+  workflow_run:
+    workflows: ["Release 3X-UI"]
+    types: [completed]
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  notify:
+    if: github.event.workflow_run.head_branch == 'main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Post GitHub Issue for upstream merge result
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ github.event.workflow_run.head_sha }}
+          RESULT: ${{ github.event.workflow_run.conclusion }}
+          BUILD_URL: ${{ github.event.workflow_run.html_url }}
+        run: |
+          set -euo pipefail
+          subject="$(gh api "repos/$GITHUB_REPOSITORY/commits/$SOURCE_SHA" --jq '.commit.message' | head -n 1)"
+          prefix='chore(upstream): merge stable '
+          [[ "$subject" == "$prefix"* ]] || exit 0
+          tag="${subject#"$prefix"}"
+          [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || exit 0
+          title="[upstream-sync] $tag release $RESULT"
+          existing="$(gh issue list --repo "$GITHUB_REPOSITORY" --state all --limit 200 --json title,number |
+            jq -r --arg title "$title" '.[] | select(.title == $title) | .number' | head -n 1 || true)"
+          [[ -z "$existing" ]] || exit 0
+          if [[ "$RESULT" == success ]]; then
+            message="Release completed successfully. Updated fork packages are available for manual installation."
+          else
+            message="Release build did not succeed. Do NOT update your VPS until the build issue is resolved."
+          fi
+          printf '@Scluzlep — Upstream %s merged into the ECH fork.\n\n%s\n\nBuild: %s\nFork release: https://github.com/%s/releases/tag/dev-latest\nCommit: %s\n\nThis automation never deploys to your VPS.\n' \
+            "$tag" "$message" "$BUILD_URL" "$GITHUB_REPOSITORY" "$SOURCE_SHA" > /tmp/upstream-release-issue.txt
+          gh issue create --repo "$GITHUB_REPOSITORY" --title "$title" --body-file /tmp/upstream-release-issue.txt
