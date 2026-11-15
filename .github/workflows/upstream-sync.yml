@@ -85,9 +85,9 @@ jobs:
             report_failure "Cannot push merge to main; check concurrent commits or branch protection."
             exit 1
           fi
-          # GITHUB_TOKEN push events cannot start other push-triggered workflows.
-          # workflow_dispatch is explicitly allowed and publishes dev-latest.
-          if ! gh workflow run release.yml --repo "$GITHUB_REPOSITORY" --ref main; then
+          # A GITHUB_TOKEN push does not trigger a normal on:push workflow.
+          # Explicitly dispatch the stable Release with the newly merged version.
+          if ! gh workflow run release.yml --repo "$GITHUB_REPOSITORY" --ref main -f release_tag="$TAG"; then
             report_failure "Merged successfully, but dispatching the Release workflow failed."
             exit 1
           fi

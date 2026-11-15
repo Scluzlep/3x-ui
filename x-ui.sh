@@ -129,7 +129,7 @@ before_show_menu() {
 }
 
 install() {
-    bash <(curl -Ls https://raw.githubusercontent.com/Scluzlep/3x-ui/main/install.sh) dev-latest
+    bash <(curl -Ls https://raw.githubusercontent.com/Scluzlep/3x-ui/main/install.sh)
     if [[ $? == 0 ]]; then
         if [[ $# == 0 ]]; then
             start
@@ -148,7 +148,7 @@ update() {
         fi
         return 0
     fi
-    XUI_UPDATE_TAG="dev-latest" bash <(curl -Ls https://raw.githubusercontent.com/Scluzlep/3x-ui/main/update.sh)
+    bash <(curl -Ls https://raw.githubusercontent.com/Scluzlep/3x-ui/main/update.sh)
     if [[ $? == 0 ]]; then
         LOGI "Update is complete, Panel has automatically restarted "
         before_show_menu

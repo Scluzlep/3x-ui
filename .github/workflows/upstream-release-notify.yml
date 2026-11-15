@@ -36,8 +36,8 @@ jobs:
           else
             message="Release build did not succeed. Do NOT update your VPS until the build issue is resolved."
           fi
-          printf '@Scluzlep — Upstream %s merged into the ECH fork.\n\n%s\n\nBuild: %s\nFork release: https://github.com/%s/releases/tag/dev-latest\nCommit: %s\n\nThis automation never deploys to your VPS.\n' \
-            "$tag" "$message" "$BUILD_URL" "$GITHUB_REPOSITORY" "$SOURCE_SHA" > /tmp/upstream-release-issue.txt
+          printf '@Scluzlep — Upstream %s merged into the ECH fork.\n\n%s\n\nBuild: %s\nFork release: https://github.com/%s/releases/tag/%s\nCommit: %s\n\nThis automation never deploys to your VPS.\n' \
+            "$tag" "$message" "$BUILD_URL" "$GITHUB_REPOSITORY" "$tag" "$SOURCE_SHA" > /tmp/upstream-release-issue.txt
           if ! gh issue create --repo "$GITHUB_REPOSITORY" --title "$title" --body-file /tmp/upstream-release-issue.txt; then
             echo "::warning::GitHub Issues may be disabled. Enable Issues under Settings > General > Features."
             cat /tmp/upstream-release-issue.txt >> "$GITHUB_STEP_SUMMARY"

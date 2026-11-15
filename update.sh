@@ -529,10 +529,8 @@ update_x-ui() {
 
     echo -e "${green}Downloading new x-ui version...${plain}"
 
-    # XUI_UPDATE_TAG lets the panel target a specific release tag (e.g. the
-    # rolling dev-latest pre-release). Empty keeps the default latest-stable flow.
-    # Fork releases are published through the rolling dev-latest channel.
-    XUI_UPDATE_TAG="${XUI_UPDATE_TAG:-dev-latest}"
+    # XUI_UPDATE_TAG optionally pins a tag; empty selects the fork's
+    # latest stable GitHub Release.
     if [[ -n "${XUI_UPDATE_TAG}" ]]; then
         tag_version="${XUI_UPDATE_TAG}"
         echo -e "${green}Using update tag: ${tag_version}${plain}"
